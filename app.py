@@ -92,25 +92,50 @@ posts['hour'] = pd.to_datetime(posts.datetime).dt.hour
 posts = posts[~posts.text.isnull() & (posts.text != 'Нет текста')].copy()
 
 
-# Объединённые стили
-combined_styles = """ <style> body { background-color: #ffb347; /* Замените на нужный вам цвет */ } .title h1 { font-family: 'Open Sans', sans-serif; font-size: 28px; line-height: 36px; color: #333; background-color: #ffb347; padding: 20px; box-shadow: 0 10px 15px rgba(0,0,0,0.05); border-radius: 10px; text-align: center; } .subheader h2 { font-family: 'Open Sans', sans-serif; font-size: 16px; line-height: 24px; color: #666; margin-top: 20px; margin-bottom: 20px; font-weight: bold; } </style> """
+
+# Стиль заголовка
+header_style = """
+    <style>
+        .title h1 {
+            font-family: 'Open Sans', sans-serif;
+            font-size: 28px;
+            line-height: 36px;
+            color: #333;
+            background-color: #ffb347;
+            padding: 20px;
+            box-shadow: 0 10px 15px rgba(0,0,0,0.05);
+            border-radius: 10px;
+            text-align: center;
+        }
+    </style>
+"""
+
+# Стиль подзаголовка
+subheader_style = """
+    <style>
+        .subheader h2 {
+            font-family: 'Open Sans', sans-serif;
+            font-size: 16px;
+            line-height: 24px;
+            color: #666;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+    </style>
+"""
 
 # Основная функция приложения
 def main():
     st.set_page_config(layout="wide")
-
-
-    # Применяем объединённые стили
-    st.markdown(combined_styles, unsafe_allow_html=True)
     
     # Заголовок
+    st.markdown(header_style, unsafe_allow_html=True)
     st.markdown('<div class="title"><h1>Simulative</h1></div>', unsafe_allow_html=True)
     
     # Подзаголовок
+    st.markdown(subheader_style, unsafe_allow_html=True)
     st.markdown('<div class="subheader"><h2>Дашборд по анализу Telegram-каналов</h2></div>', unsafe_allow_html=True)
-
-
-
     
     # Выбор канала
     channels = posts['channel_name'].unique()
