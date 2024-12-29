@@ -36,7 +36,6 @@ def process_data(channels, posts, reactions, subscribers, views):
     gr_pvr = combine_post_view_reaction_data(post_view, reacts)
     
     return {
-        'channels': channels,
         'posts': posts,
         'views': views,
         'subs': subs,
@@ -46,12 +45,12 @@ def process_data(channels, posts, reactions, subscribers, views):
     }
 
 def process_posts(posts, channels):
-    posts.rename(columns={'date': 'datetime'}, inplace=True)
     posts = posts.merge(channels[['id', 'channel_name']].rename(columns={'id':'channel_id'}), on='channel_id', how='left')
-    posts['date'] = pd.to_datetime(posts.datetime).dt.date
-    posts['time'] = posts.datetime.str[10:]
+    posts['datetime'] = pd.to_datetime(posts.datetime)
+    posts['date'] = posts['datetime'].dt.date
+    posts['time'] = posts['datetime'].dt.time
     posts['cnt'] = posts.groupby(['channel_id', 'date'])['message_id'].transform('count')
-    posts['hour'] = pd.to_datetime(posts.datetime).dt.hour
+    posts['hour'] = posts['datetime'].dt.hour
     return posts[~posts.text.isnull() & (posts.text != 'Нет текста')].copy()
 
 def process_views(views):
@@ -99,8 +98,6 @@ def combine_post_view_reaction_data(post_view, reacts):
     group_post_view = post_view.groupby(['channel_name', 'post_datetime', 'post_id', 'current_views'])[['datetime']].last().reset_index()
     group_reacts['datetime_format'] = pd.to_datetime(group_reacts.datetime).dt.strftime('%Y-%m-%d %H:%M:%S')
     group_post_view['datetime_format'] = pd.to_datetime(group_post_view.datetime).dt.strftime('%Y-%m-%d %H:%M:%S')
-    group_reacts.drop('datetime', axis=1, inplace=True)
-    group_post_view.drop('datetime', axis=1, inplace=True)
     gr_pvr = group_post_view.merge(group_reacts, on=['post_id', 'datetime_format'], how='left').drop_duplicates()
     gr_pvr = gr_pvr[~gr_pvr.react_cnt.isnull()].copy()
     gr_pvr['react_cnt_sum'] = gr_pvr.groupby('post_id')['react_cnt'].transform('sum')
