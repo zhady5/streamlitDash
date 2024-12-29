@@ -77,9 +77,13 @@ with col1:
     st.metric("Max Daily Loss", f"{subs_channel.day_change_neg.min():.2f}")
 
 with col2:
-    st.metric("Avg Posts/Day", f"{posts_channel.groupby('date').size().mean():.2f}")
-    st.metric("Avg Posts/Week", f"{posts_channel.groupby(pd.Grouper(key='date', freq='W')).size().mean():.2f}")
-    st.metric("Avg Posts/Month", f"{posts_channel.groupby(pd.Grouper(key='date', freq='M')).size().mean():.2f}")
+    if not posts_channel.empty and 'date' in posts_channel.columns:
+        posts_channel['date'] = pd.to_datetime(posts_channel['date'])
+        st.metric("Avg Posts/Day", f"{posts_channel.groupby('date').size().mean():.2f}")
+        st.metric("Avg Posts/Week", f"{posts_channel.groupby(pd.Grouper(key='date', freq='W')).size().mean():.2f}")
+        st.metric("Avg Posts/Month", f"{posts_channel.groupby(pd.Grouper(key='date', freq='M')).size().mean():.2f}")
+    else:
+        st.warning("No post data available for this channel")
 
 with col3:
     st.metric("Avg Views/Post", f"{post_view_channel.groupby('post_id')['current_views'].first().mean():.2f}")
