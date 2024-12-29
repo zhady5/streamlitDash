@@ -3,38 +3,48 @@ import os
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import math
+import logging
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def load_data():
     folder_path = os.getcwd()
     file_list = sorted([f for f in os.listdir(folder_path) if f.endswith('.csv')])
     
-    channels = pd.read_csv(os.path.join(folder_path, file_list[0]))
-    posts = pd.read_csv(os.path.join(folder_path, file_list[1]))
-    reactions = pd.read_csv(os.path.join(folder_path, file_list[2]))
-    subscribers = pd.read_csv(os.path.join(folder_path, file_list[3]))
-    views = pd.read_csv(os.path.join(folder_path, file_list[4]))
+    if len(file_list) < 5:
+        logger.error(f"Not enough CSV files found in {folder_path}. Expected 5, found {len(file_list)}.")
+        return None, None, None, None, None
+
+    try:
+        channels = pd.read_csv(os.path.join(folder_path, file_list[0]))
+        posts = pd.read_csv(os.path.join(folder_path, file_list[1]))
+        reactions = pd.read_csv(os.path.join(folder_path, file_list[2]))
+        subscribers = pd.read_csv(os.path.join(folder_path, file_list[3]))
+        views = pd.read_csv(os.path.join(folder_path, file_list[4]))
+    except Exception as e:
+        logger.error(f"Error reading CSV files: {str(e)}")
+        return None, None, None, None, None
     
     return channels, posts, reactions, subscribers, views
 
 def process_data(channels, posts, reactions, subscribers, views):
-    # Process posts
-    posts = process_posts(posts, channels)
-    
-    # Process views
-    views = process_views(views)
-    
-    # Process subscribers
-    subs = process_subscribers(subscribers, channels)
-    
-    # Process reactions
-    reacts = process_reactions(reactions)
-    
-    # Combine post and view data
-    post_view = combine_post_view_data(posts, views)
-    
-    # Combine post, view, and reaction data
-    gr_pvr = combine_post_view_reaction_data(post_view, reacts)
-    
+    if any(df is None for df in [channels, posts, reactions, subscribers, views]):
+        logger.error("One or more DataFrames are None. Cannot process data.")
+        return None
+
+    try:
+        posts = process_posts(posts, channels)
+        views = process_views(views)
+        subs = process_subscribers(subscribers, channels)
+        reacts = process_reactions(reactions)
+        post_view = combine_post_view_data(posts, views)
+        gr_pvr = combine_post_view_reaction_data(post_view, reacts)
+    except Exception as e:
+        logger.error(f"Error in process_data: {str(e)}")
+        return None
+
     return {
         'posts': posts,
         'views': views,
@@ -45,8 +55,17 @@ def process_data(channels, posts, reactions, subscribers, views):
     }
 
 def process_posts(posts, channels):
+    if 'channel_id' not in posts.columns or 'id' not in channels.columns:
+        logger.error("Required columns missing in posts or channels DataFrame")
+        return pd.DataFrame()
+
     posts = posts.merge(channels[['id', 'channel_name']].rename(columns={'id':'channel_id'}), on='channel_id', how='left')
-    posts['datetime'] = pd.to_datetime(posts.datetime)
+    
+    if 'datetime' not in posts.columns:
+        logger.error("'datetime' column not found in posts DataFrame")
+        return pd.DataFrame()
+
+    posts['datetime'] = pd.to_datetime(posts['datetime'], errors='coerce')
     posts['date'] = posts['datetime'].dt.date
     posts['time'] = posts['datetime'].dt.time
     posts['cnt'] = posts.groupby(['channel_id', 'date'])['message_id'].transform('count')
@@ -54,16 +73,26 @@ def process_posts(posts, channels):
     return posts[~posts.text.isnull() & (posts.text != 'Нет текста')].copy()
 
 def process_views(views):
+    if 'timestamp' not in views.columns or 'views' not in views.columns:
+        logger.error("Required columns missing in views DataFrame")
+        return pd.DataFrame()
+
     views = views.rename(columns={'timestamp': 'datetime', 'views': 'view_cnt'})
-    views['date'] = pd.to_datetime(views.datetime).dt.date
+    views['datetime'] = pd.to_datetime(views['datetime'], errors='coerce')
+    views['date'] = views['datetime'].dt.date
     view_change = views.sort_values(by=['post_id', 'datetime']).groupby('post_id')['view_cnt'].diff().rename('view_change')
     views = views.merge(view_change, left_index=True, right_index=True)
     views['view_change'] = views['view_change'].fillna(views['view_cnt'])
     return views
 
 def process_subscribers(subscribers, channels):
+    if 'timestamp' not in subscribers.columns or 'subscriber_count' not in subscribers.columns:
+        logger.error("Required columns missing in subscribers DataFrame")
+        return pd.DataFrame()
+
     subs = subscribers.rename(columns={'timestamp': 'datetime', 'subscriber_count': 'subs_cnt'})
-    subs['date'] = pd.to_datetime(subs.datetime).dt.date
+    subs['datetime'] = pd.to_datetime(subs['datetime'], errors='coerce')
+    subs['date'] = subs['datetime'].dt.date
     subs = subs.merge(channels[['id', 'channel_name']].rename(columns={'id':'channel_id'}), on='channel_id', how='left')
     subs = subs.sort_values(by=['channel_id', 'datetime'])
     subs['subs_change'] = subs.groupby('channel_id')['subs_cnt'].diff().fillna(0)
@@ -74,11 +103,20 @@ def process_subscribers(subscribers, channels):
     return subs
 
 def process_reactions(reactions):
+    if 'timestamp' not in reactions.columns or 'count' not in reactions.columns:
+        logger.error("Required columns missing in reactions DataFrame")
+        return pd.DataFrame()
+
     reacts = reactions.rename(columns={'timestamp': 'datetime', 'count': 'react_cnt'})
-    reacts['date'] = pd.to_datetime(reacts.datetime).dt.date
+    reacts['datetime'] = pd.to_datetime(reacts['datetime'], errors='coerce')
+    reacts['date'] = reacts['datetime'].dt.date
     return reacts
 
 def combine_post_view_data(posts, views):
+    if posts.empty or views.empty:
+        logger.error("Posts or views DataFrame is empty")
+        return pd.DataFrame()
+
     post_view = views[['post_id', 'view_cnt', 'view_change', 'datetime']].merge(
         posts[['id', 'channel_name', 'date', 'datetime']].rename(columns={'id': 'post_id', 'datetime': 'post_datetime'}),
         on='post_id'
@@ -94,6 +132,10 @@ def combine_post_view_data(posts, views):
     return post_view.sort_values(by=['channel_name', 'post_datetime'], ascending=False)
 
 def combine_post_view_reaction_data(post_view, reacts):
+    if post_view.empty or reacts.empty:
+        logger.error("Post_view or reacts DataFrame is empty")
+        return pd.DataFrame()
+
     group_reacts = reacts.groupby(['post_id', 'reaction_type'])[['datetime', 'react_cnt']].last().reset_index()
     group_post_view = post_view.groupby(['channel_name', 'post_datetime', 'post_id', 'current_views'])[['datetime']].last().reset_index()
     group_reacts['datetime_format'] = pd.to_datetime(group_reacts.datetime).dt.strftime('%Y-%m-%d %H:%M:%S')
